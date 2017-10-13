@@ -1,0 +1,5 @@
+# executables and binaries
+*.exe
+*.out
+*.o
+*visitlog.py
