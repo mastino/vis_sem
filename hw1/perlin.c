@@ -72,14 +72,6 @@ int main(int argc, char *argv[]) {
   strcpy(path_to_binary, CUR_PATH); // CUR_PATH == macro from Makefile
   VisItInitializeSocketAndDumpSimFile("Brian_Perlin_Noise", "meh", path_to_binary, NULL, NULL, NULL);
 
-  //TODO is this where these go?
-  /* Register data access callbacks */
-  VisItSetGetMetaData(SimGetMetaData, (void*)&sim);
-  SetMeshMetaData((void*)&sim);
-  VisItSetGetMesh(VisItGetMesh, (void*)&sim);
-
-  //VisItSetGetVariable(SimGetVariable, (void*)&sim);
-
   //read_input_deck(&sim);
   main_loop(&sim);
 
@@ -121,6 +113,10 @@ void main_loop(simulation_data *sim) {
       if(VisItAttemptToCompleteConnection()) {
         fprintf(stderr, "VisIt connected\n");
         VisItSetCommandCallback(ControlCommandCallback, (void*)sim);
+        /* Register data access callbacks */
+        VisItSetGetMetaData(SimGetMetaData, (void*)&sim);
+        VisItSetGetMesh(VisItGetMesh, (void*)&sim);
+        VisItSetGetVariable(SimGetVariable, (void*)&sim);
       }
       else
         fprintf(stderr, "VisIt did not connect\n");
@@ -142,6 +138,7 @@ void main_loop(simulation_data *sim) {
 
 
 visit_handle SimGetMetaData(void *cbdata) {
+
   visit_handle md = VISIT_INVALID_HANDLE;
   simulation_data *sim = (simulation_data *)cbdata;
   
@@ -156,27 +153,42 @@ visit_handle SimGetMetaData(void *cbdata) {
     VisIt_SimulationMetaData_setCycleTime(md, sim->cycle, sim->time);
   }
 
-  return md;
-}
+  const char *cmd_names[] = {"halt", "step", "run"};
+  int i = 0;
+  for(i = 0; i < sizeof(cmd_names)/sizeof(const char *); ++i) {
+    visit_handle cmd = VISIT_INVALID_HANDLE;
+    if(VisIt_CommandMetaData_alloc(&cmd) == VISIT_OKAY) {
+      VisIt_CommandMetaData_setName(cmd, cmd_names[i]);
+      VisIt_SimulationMetaData_addGenericCommand(md, cmd);
+    }
+  }
 
-// Not the actual mesh because that would make sense
-// This gives metadata about the mesh
-void SetMeshMetaData(void *cbdata) {
-  
-  visit_handle md = VISIT_INVALID_HANDLE;
-  simulation_data *sim = (simulation_data *)cbdata;
 
+  // Needs md to become mesh metadata object
   visit_handle m1 = VISIT_INVALID_HANDLE;
   visit_handle m2 = VISIT_INVALID_HANDLE;
-
   //TODO fix and figure out if this is correct
-  if(VisIt_VariableMetaData_alloc(&md) == VISIT_OKAY) {
+  if(VisIt_MeshMetaData_alloc(&m1) == VISIT_OKAY) {
+    printf("Setting mesh \"area\"\n");
     VisIt_MeshMetaData_setName(m1, "area");
     VisIt_MeshMetaData_setMeshType(m1, VISIT_MESHTYPE_RECTILINEAR);
     VisIt_MeshMetaData_setTopologicalDimension(m1, 2);
     VisIt_MeshMetaData_setSpatialDimension(m1, 2);
     VisIt_SimulationMetaData_addMesh(md, m1);
   }
+
+  return md;
+}
+
+// Not the actual mesh because that would make sense
+// This gives metadata about the mesh
+// moving stuff to
+void SetMeshMetaData(void *cbdata) {
+  
+  visit_handle md = VISIT_INVALID_HANDLE;
+  simulation_data *sim = (simulation_data *)cbdata;
+
+
 
 }
 
@@ -218,15 +230,13 @@ visit_handle VisItGetMesh(int domain, const char *name, void *data) {
 
   if(strcmp(name, "area") == 0) {
     /* Allocate a rectilinear mesh. */
-    if(VisIt_RectilinearMesh_alloc(&mesh) == VISIT_OKAY) {
-      if(VisIt_RectilinearMesh_alloc(&h) != VISIT_ERROR) {
-          visit_handle hxc, hyc;
-          VisIt_VariableData_alloc(&hxc);
-          VisIt_VariableData_alloc(&hyc);
-          VisIt_VariableData_setDataF(hxc, VISIT_OWNER_SIM, 1, N, rmesh_x);
-          VisIt_VariableData_setDataF(hyc, VISIT_OWNER_SIM, 1, N, rmesh_y);
-          VisIt_RectilinearMesh_setCoordsXY(h, hxc, hyc);
-      }
+    if(VisIt_RectilinearMesh_alloc(&h) != VISIT_ERROR) {
+        visit_handle hxc, hyc;
+        VisIt_VariableData_alloc(&hxc);
+        VisIt_VariableData_alloc(&hyc);
+        VisIt_VariableData_setDataF(hxc, VISIT_OWNER_SIM, 1, N, rmesh_x);
+        VisIt_VariableData_setDataF(hyc, VISIT_OWNER_SIM, 1, N, rmesh_y);
+        VisIt_RectilinearMesh_setCoordsXY(h, hxc, hyc);
     }
   }
   // where you have lots of meshes
@@ -236,6 +246,7 @@ visit_handle VisItGetMesh(int domain, const char *name, void *data) {
   //     /* Fill in the attributes of the CurvilinearMesh. */
   //   }
   // }
+
 
   return mesh;
 }
