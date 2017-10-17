@@ -17,7 +17,7 @@
 #include "sim_data.h"
 
 #ifndef N
-#define N 10000
+#define N 50
 #endif
 #define NUM_CYCLES 100
 
@@ -51,7 +51,6 @@ void   main_loop(simulation_data *sim);
 void   simulate_one_timestep(simulation_data *sim);
 void   write_vis_dump(simulation_data *sim);
 
-void SetMeshMetaData(void *cbdata);
 
 visit_handle SimGetMetaData(void *cbdata);
 visit_handle SimGetVariable(int domain, const char *name, void *cbdata);
@@ -87,6 +86,7 @@ int main(int argc, char *argv[]) {
 void   simulation_data_ctor(simulation_data *sim) {
   sim->cycle   = 0;
   sim->time    = 0;
+  // sim->runMode = VISIT_SIMMODE_RUNNING;
   sim->runMode = VISIT_SIMMODE_STOPPED;
   sim->done    = 0;
 }
@@ -96,7 +96,7 @@ void main_loop(simulation_data *sim) {
   int blocking, visitstate, err = 0;
 
   do {
-
+    printf("Main loop\n");
     blocking = (sim->runMode == VISIT_SIMMODE_RUNNING) ? 0 : 1;
     /* Get input from VisIt or timeout so the simulation can run. */
     visitstate = VisItDetectInput(blocking, -1);
@@ -112,11 +112,11 @@ void main_loop(simulation_data *sim) {
       /* VisIt is trying to connect to sim. */
       if(VisItAttemptToCompleteConnection()) {
         fprintf(stderr, "VisIt connected\n");
-        VisItSetCommandCallback(ControlCommandCallback, (void*)sim);
         /* Register data access callbacks */
         VisItSetGetMetaData(SimGetMetaData, (void*)&sim);
         VisItSetGetMesh(VisItGetMesh, (void*)&sim);
-        VisItSetGetVariable(SimGetVariable, (void*)&sim);
+        VisItSetGetVariable(SimGetVariable, (void*)sim->data);
+        // VisItSetCommandCallback(ControlCommandCallback, (void*)sim);
       }
       else
         fprintf(stderr, "VisIt did not connect\n");
@@ -163,7 +163,6 @@ visit_handle SimGetMetaData(void *cbdata) {
     }
   }
 
-
   // Needs md to become mesh metadata object
   visit_handle m1 = VISIT_INVALID_HANDLE;
   visit_handle m2 = VISIT_INVALID_HANDLE;
@@ -180,63 +179,50 @@ visit_handle SimGetMetaData(void *cbdata) {
   return md;
 }
 
-// Not the actual mesh because that would make sense
-// This gives metadata about the mesh
-// moving stuff to
-void SetMeshMetaData(void *cbdata) {
-  
-  visit_handle md = VISIT_INVALID_HANDLE;
-  simulation_data *sim = (simulation_data *)cbdata;
-
-
-
-}
-
 // still not sure what this is good for
 // TODO figure out
-visit_handle SimGetVariable(int domain, const char *name, void *cbdata) {
+visit_handle SimGetVariable(int domain, const char *name, void *data) {
 
-    visit_handle h = VISIT_INVALID_HANDLE;
-    int nComponents = 1, nTuples = N*N;
-  
-    if(VisIt_VariableData_alloc(&h) == VISIT_OKAY) {
-
-        if(strcmp(name, "speed") == 0) {
-
-            static float *var_data = new float[nTuples];
-          
-            for (int i = 0; i < nTuples; i++) {
-              var_data[i] = 5;
-            }
- 
-            VisIt_VariableData_setDataF(h, VISIT_OWNER_SIM, nComponents, nTuples, var_data);
-        }
+  visit_handle h = VISIT_INVALID_HANDLE;
+  int nComponents = 1, nTuples = 0;
+  if(VisIt_VariableData_alloc(&h) == VISIT_OKAY) {
+     if(strcmp(name, "area") == 0) {
+      nTuples = N*N;
+      VisIt_VariableData_setDataD(h, VISIT_OWNER_SIM, nComponents, nTuples, (double*)data);
     }
-    return h;
+  }
+  return h;
+
 }
 
-// this is where the magic happens
+
 visit_handle VisItGetMesh(int domain, const char *name, void *data) {
 
-  visit_handle mesh = VISIT_INVALID_HANDLE;
-  visit_handle h = VISIT_INVALID_HANDLE;
+  fprintf(stderr, "enter visit get mesh\n");
+  fprintf(stderr, "data is %p\n", data);
 
-  float rmesh_x[N];
-  float rmesh_y[N];
+  visit_handle h = VISIT_INVALID_HANDLE;
+  int nComponents = 1, nTuples = N*N;
+  float* var_data = (float*)malloc(sizeof(float)*nTuples);
+
+  float* rmesh_x = (float*)malloc(sizeof(float)*N);
+  float* rmesh_y = (float*)malloc(sizeof(float)*N);
   float c = 0.0;
   for (int i = 0; i < N; i++) {
-    rmesh_x[i] = rmesh_y[i] = c++;
+    rmesh_x[i] = rmesh_y[i] = c;
+    c += 1.0;
   }
 
   if(strcmp(name, "area") == 0) {
     /* Allocate a rectilinear mesh. */
     if(VisIt_RectilinearMesh_alloc(&h) != VISIT_ERROR) {
-        visit_handle hxc, hyc;
-        VisIt_VariableData_alloc(&hxc);
-        VisIt_VariableData_alloc(&hyc);
-        VisIt_VariableData_setDataF(hxc, VISIT_OWNER_SIM, 1, N, rmesh_x);
-        VisIt_VariableData_setDataF(hyc, VISIT_OWNER_SIM, 1, N, rmesh_y);
-        VisIt_RectilinearMesh_setCoordsXY(h, hxc, hyc);
+      visit_handle hxc, hyc;
+      VisIt_VariableData_alloc(&hxc);
+      VisIt_VariableData_alloc(&hyc);
+      VisIt_VariableData_setDataF(hxc, VISIT_OWNER_SIM, 1, N, rmesh_x);
+      VisIt_VariableData_setDataF(hyc, VISIT_OWNER_SIM, 1, N, rmesh_y);
+      VisIt_RectilinearMesh_setCoordsXY(h, hxc, hyc);
+
     }
   }
   // where you have lots of meshes
@@ -247,18 +233,21 @@ visit_handle VisItGetMesh(int domain, const char *name, void *data) {
   //   }
   // }
 
+  fprintf(stderr, "leave visit get mesh\n");
 
-  return mesh;
+  return h;
 }
 
 void ControlCommandCallback(const char *cmd, const char *args, void *cbdata) {
   simulation_data *sim = (simulation_data *)cbdata;
   if(strcmp(cmd, "halt") == 0)
-  sim->runMode = VISIT_SIMMODE_STOPPED;
+    sim->runMode = VISIT_SIMMODE_STOPPED;
   else if(strcmp(cmd, "step") == 0)
-  simulate_one_timestep(sim);
+    simulate_one_timestep(sim);
   else if(strcmp(cmd, "run") == 0)
-  sim->runMode = VISIT_SIMMODE_RUNNING;
+    sim->runMode = VISIT_SIMMODE_RUNNING;
+
+  printf("In control callback\n");
 }
 
 void simulate_one_timestep(simulation_data *sim) {
@@ -277,7 +266,7 @@ void simulate_one_timestep(simulation_data *sim) {
 }
 
 void write_vis_dump(simulation_data *sim) {
-  printf("Should be writing data here.\n");
+  printf("Should be writing data here?\n");
 }
 
 int noise2(int x, int y) {
