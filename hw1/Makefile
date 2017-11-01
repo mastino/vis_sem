@@ -1,4 +1,4 @@
-VISIT_INSTALL_DIR=/home/users/gravelle/visit2_12_3/2.12.3/linux-x86_64
+VISIT_INSTALL_DIR=/opt/apps/visit12_12_0-wmesa-parallel/2.12.0/linux-x86_64
 LIBSIM_DIR=$(VISIT_INSTALL_DIR)/libsim/V2
 LIBSIM_INCLUDE=-I$(LIBSIM_DIR)/include
 LIBSIM_LIBS=-L$(LIBSIM_DIR)/lib -lsimV2

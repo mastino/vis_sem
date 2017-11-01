@@ -24,6 +24,8 @@
 #define DIMS 2
 #define PTS_PER_DIM 5000
 
+double* data;
+
 static int SEED = 0;
 
 static int hash[] = {208,34,231,213,32,248,233,56,161,78,24,140,71,48,140,254,245,255,247,247,40,
@@ -40,7 +42,7 @@ static int hash[] = {208,34,231,213,32,248,233,56,161,78,24,140,71,48,140,254,24
                      114,20,218,113,154,27,127,246,250,1,8,198,250,209,92,222,173,21,88,102,219};
 
 
-
+void   init_data();
 int    noise2(int x, int y);
 double lin_inter(double x, double y, double s);
 double smooth_inter(double x, double y, double s);
@@ -54,7 +56,7 @@ void   write_vis_dump(simulation_data *sim);
 
 visit_handle SimGetMetaData(void *cbdata);
 visit_handle SimGetVariable(int domain, const char *name, void *cbdata);
-visit_handle VisItGetMesh(int domain, const char *name, void *data);
+visit_handle VisItGetMesh(int domain, const char *name, void *sim);
 void ControlCommandCallback(const char *cmd, const char *args, void *cbdata);
 
 
@@ -63,8 +65,8 @@ int main(int argc, char *argv[]) {
 
   simulation_data sim;
   simulation_data_ctor(&sim);
-  double* area = (double*)malloc(N * N * sizeof(double));
-  sim.data = area;
+  data = (double*)malloc(N * N * sizeof(double));
+  init_data();
 
   VisItSetupEnvironment();
   char path_to_binary[1024];
@@ -76,7 +78,7 @@ int main(int argc, char *argv[]) {
 
   //simulation_data_dtor(&sim);
 
-  free(area);
+  free(data);
 
   return 0;
 
@@ -115,7 +117,7 @@ void main_loop(simulation_data *sim) {
         /* Register data access callbacks */
         VisItSetGetMetaData(SimGetMetaData, (void*)&sim);
         VisItSetGetMesh(VisItGetMesh, (void*)&sim);
-        VisItSetGetVariable(SimGetVariable, (void*)sim->data);
+        VisItSetGetVariable(SimGetVariable, (void*)&sim);
         // VisItSetCommandCallback(ControlCommandCallback, (void*)sim);
       }
       else
@@ -136,6 +138,13 @@ void main_loop(simulation_data *sim) {
 }
 
 
+void init_data() {
+  int i = 0, j = 0;
+
+  for(i = 0; i < N; i++)
+    for(j = 0; j < N; j++)
+      data[i*N + j] = i+j;
+}
 
 visit_handle SimGetMetaData(void *cbdata) {
 
@@ -176,19 +185,28 @@ visit_handle SimGetMetaData(void *cbdata) {
     VisIt_SimulationMetaData_addMesh(md, m1);
   }
 
+  visit_handle vmd = VISIT_INVALID_HANDLE;
+  if(VisIt_VariableMetaData_alloc(&vmd) == VISIT_OKAY) {
+    VisIt_VariableMetaData_setName(vmd, "brian");
+    VisIt_VariableMetaData_setMeshName(vmd, "area");
+    VisIt_VariableMetaData_setType(vmd, VISIT_VARTYPE_SCALAR);
+    VisIt_VariableMetaData_setCentering(vmd, VISIT_VARCENTERING_NODE);
+    VisIt_SimulationMetaData_addVariable(md, vmd);
+  }
+
   return md;
 }
 
 // still not sure what this is good for
 // TODO figure out
-visit_handle SimGetVariable(int domain, const char *name, void *data) {
+visit_handle SimGetVariable(int domain, const char *name, void *sim) {
 
   visit_handle h = VISIT_INVALID_HANDLE;
   int nComponents = 1, nTuples = 0;
   if(VisIt_VariableData_alloc(&h) == VISIT_OKAY) {
-     if(strcmp(name, "area") == 0) {
+     if(strcmp(name, "brian") == 0) {
       nTuples = N*N;
-      VisIt_VariableData_setDataD(h, VISIT_OWNER_SIM, nComponents, nTuples, (double*)data);
+      VisIt_VariableData_setDataD(h, VISIT_OWNER_SIM, nComponents, nTuples, data);
     }
   }
   return h;
@@ -196,10 +214,8 @@ visit_handle SimGetVariable(int domain, const char *name, void *data) {
 }
 
 
-visit_handle VisItGetMesh(int domain, const char *name, void *data) {
+visit_handle VisItGetMesh(int domain, const char *name, void *sim) {
 
-  fprintf(stderr, "enter visit get mesh\n");
-  fprintf(stderr, "data is %p\n", data);
 
   visit_handle h = VISIT_INVALID_HANDLE;
   int nComponents = 1, nTuples = N*N;
@@ -253,11 +269,11 @@ void ControlCommandCallback(const char *cmd, const char *args, void *cbdata) {
 void simulate_one_timestep(simulation_data *sim) {
 
   int x, y;
-  double * area = sim->data;
 
   for(y = 0; y < N; y++)
     for(x = 0; x < N; x++)
-      perlin2d(area[x], area[y], 0.1, 4);
+
+      // data[x*N + y] = perlin2d(data[x], data[y], 0.1, 4);
 
   sim->cycle++;
   sim->done = sim->cycle > NUM_CYCLES;
