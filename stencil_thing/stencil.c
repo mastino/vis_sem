@@ -10,9 +10,10 @@
 #ifndef N
 #define N 10   // the order of the matrix
 #endif
-#ifndef N
-#define N 2   // the number of timesteps
+#ifndef T
+#define T 2   // the number of timesteps
 #endif
+
 #define HVAL   200.0    // initial value of High areas
 #define LVAL   5.0      // initial value of Low areas
 #define WIEGHT 0.5      // how much the next step is based on the previous vs the surrounding
@@ -23,11 +24,12 @@
 double A[N][N];
 double B[N][N];
 
-void matrix_init(void);
 void step(void);
+void matrix_init(void);
+void print_matrix(double mat_a[N][N]);
 
 int main(int argc, char **argv) {
-	int correct;
+	int correct, t = 0;
 	int err = 0;
 	double run_time;
 	double mflops;
@@ -41,7 +43,13 @@ int main(int argc, char **argv) {
 
 	matrix_init();
 
-	//TODO the simulation
+	for (t = 0; t < T; t++) {
+		step();
+#ifdef DEBUG
+		printf("Printing A from step %d\n", t);
+#endif
+		print_matrix(A);
+	}
 
 	end = omp_get_wtime();
 
@@ -62,9 +70,9 @@ void step(void) {
 			for (hi = -1; hi <= 1; hi++) {
 				for ( hj = -1; hj <= 1; hj++) {
 					ii = i+hi; jj = j+hj;
-					if( (ii < 0) || (ii > N) || (jj < 0) || (jj > N) ) {
+					if( (ii < 0) || (ii >= N) || (jj < 0) || (jj >= N) ) {
 						halo_sum += A[i][j];
-					} else if( (ii != 0) && (jj != 0) ) {
+					} else if( (hi != 0) && (hj != 0) ) {
 						halo_sum += A[ii][jj];
 					}
 				}
@@ -73,7 +81,7 @@ void step(void) {
 
 		}
 	}
-
+  
 	for (i = 0; i < N; i++) {
 		for (j = 0; j < N; j++) {
 			A[i][j] = WIEGHT * A[i][j] + (1-WIEGHT) * B[i][j];
@@ -104,5 +112,18 @@ void matrix_init(void) {
 			B[i][j] = 0;
 		}
 	}
+
+}
+
+
+void print_matrix(double mat_a[N][N]) {
+
+ int i, j;
+ for (i = 0; i < N; i++) {
+	 for (j = 0; j < N; j++) {
+		 printf("%.4f ", mat_a[i][j]);
+	 }
+	 printf("\n\n");
+ }
 
 }
